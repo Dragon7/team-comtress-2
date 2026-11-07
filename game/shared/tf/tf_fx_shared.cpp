@@ -20,6 +20,8 @@
 #endif
 
 ConVar tf_use_fixed_weaponspreads( "tf_use_fixed_weaponspreads", "1", FCVAR_REPLICATED | FCVAR_NOTIFY, "If set to 1, weapons that fire multiple pellets per shot will use a non-random pellet distribution." );
+ConVar tf_weaponspread_continuous_seed("tf_weaponspread_continuous_seed", "-1", FCVAR_REPLICATED, "If set to >-1, the base seed for fixed recoil spread for continuous single bullet fire weapons.");
+ConVar tf_weaponspread_continuous_seed_multishot("tf_weaponspread_continuous_seed_multishot", "-1", FCVAR_REPLICATED, "If set to >-1, the base seed for fixed recoil spread for continuous multi-bullet fire weapons like the Minigun.");
 
 // Client specific.
 #ifdef CLIENT_DLL
@@ -108,18 +110,37 @@ void EndGroupingSounds() {}
 
 #endif
 
-Vector g_vecFixedWpnSpreadPellets[] = 
+Vector2D g_vecFixedWpnSpreadPellets[] = 
 {
-	Vector( 0,0,0 ),	// First pellet goes down the middle
-	Vector( 1,0,0 ),	
-	Vector( -1,0,0 ),	
-	Vector( 0,-1,0 ),	
-	Vector( 0,1,0 ),	
-	Vector( 0.85,-0.85,0 ),	
-	Vector( 0.85,0.85,0 ),	
-	Vector( -0.85,-0.85,0 ),	
-	Vector( -0.85,0.85,0 ),	
-	Vector( 0,0,0 ),	// last pellet goes down the middle as well to reward fine aim
+	Vector2D( 0,0 ), 	// First pellet goes down the middle
+	Vector2D( 1,0 ),
+	Vector2D( -1,0 ),
+	Vector2D( 0,-1 ),
+	Vector2D( 0,1 ),
+	Vector2D( 0.85,-0.85),
+	Vector2D(-0.85,-0.85),
+	Vector2D( 0.85,0.85 ),
+	Vector2D( -0.85,0.85 ),	
+	Vector2D( 0,0),	// last pellet goes down the middle as well to reward fine aim
+};
+
+Vector2D g_vecFixedWpnSpreadPellets15[] =
+{
+	Vector2D(0,0),
+	Vector2D(1,0),
+	Vector2D(-1,0),
+	Vector2D(0,-1),
+	Vector2D(0,1),
+	Vector2D(1,-1),
+	Vector2D(-1,-1),
+	Vector2D(1,1),
+	Vector2D(-1,1),
+	Vector2D(2,0),
+	Vector2D(-2,0),
+	Vector2D(2,-1),
+	Vector2D(-2,-1),
+	Vector2D(2,1),
+	Vector2D(-2,1),
 };
 
 //-----------------------------------------------------------------------------
@@ -157,6 +178,12 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 #endif
 	if ( !pPlayer )
 		return;
+
+	CTFWeaponBase* pWeapon = pPlayer->GetActiveTFWeapon();
+
+#ifdef CLIENT_DLL
+	pWpn = pWeapon;
+#endif
 
 // Client specific.
 #ifdef CLIENT_DLL
@@ -239,7 +266,6 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 	// Setup the bullet damage type & roll for crit.
 	int	nDamageType	= DMG_GENERIC;
 	int nCustomDamageType = TF_DMG_CUSTOM_NONE;
-	CTFWeaponBase *pWeapon = pPlayer->GetActiveTFWeapon(); // FIXME: Should this be pWpn?
 	if ( pWeapon )
 	{
 		nDamageType	= pWeapon->GetDamageType();
@@ -270,14 +296,32 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 #endif // !CLIENT
 
 	int nBulletsPerShot = pWeaponInfo->GetWeaponData( iMode ).m_nBulletsPerShot;
+	float fBulletsPerShotMult = 1.0f;
+	if (pWeapon)
+	{
+		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER(pWeapon, fBulletsPerShotMult, mult_bullets_per_shot);
+	}
+	nBulletsPerShot = (int)((float)nBulletsPerShot * fBulletsPerShotMult);
+	
 	bool bFixedSpreadEnabled = IsFixedWeaponSpreadEnabled();
+	if (!bFixedSpreadEnabled)
+	{
+		int iFixedSpread = 0;
+		CALL_ATTRIB_HOOK_INT_ON_OTHER(pWeapon, iFixedSpread, fixed_shot_pattern)
+		if (iFixedSpread == 1)
+		{
+			bFixedSpreadEnabled = true;
+		}
+	}
 	bool bSpreadShotPattern = (nDamageType & DMG_BUCKSHOT) && (nBulletsPerShot > 1);
 	bool bFixedRecoilSpread = !bSpreadShotPattern && bFixedSpreadEnabled;
 	bool bFixedSpread = bSpreadShotPattern && bFixedSpreadEnabled;
-	if ( pWeapon )
-	{
-		CALL_ATTRIB_HOOK_FLOAT_ON_OTHER( pWeapon, nBulletsPerShot, mult_bullets_per_shot );
-	}
+
+	int iSpreadScalesConsecutive = 0;
+	CALL_ATTRIB_HOOK_INT_ON_OTHER(pWeapon, iSpreadScalesConsecutive, mult_spread_scales_consecutive)
+	bool bSpreadNormal = iSpreadScalesConsecutive == 0;
+
+	int iBaseSeed = iSeed;
 
 	for ( int iBullet = 0; iBullet < nBulletsPerShot; ++iBullet )
 	{
@@ -288,28 +332,42 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 		if (iBullet == 0 && pWpn)
 		{
 			float flTimeSinceLastShot = (gpGlobals->curtime - pWpn->m_flLastFireTime);
-			if (nBulletsPerShot > 1 && flTimeSinceLastShot > 0.25)
+			if (!bSpreadNormal && flTimeSinceLastShot > 0.67f)
 			{
 				bFirePerfect = true;
-				pWpn->m_iBulletsFiredContinuously = 0;
+				pWpn->m_iConsecutiveShots = 0;
 			}
-			else if (nBulletsPerShot == 1 && flTimeSinceLastShot > 1.25)
+			else if (bSpreadNormal && nBulletsPerShot > 1)
 			{
-				bFirePerfect = true;
-				pWpn->m_iBulletsFiredContinuously = 0;
+				if (flTimeSinceLastShot > 0.25f)
+				{
+					bFirePerfect = true;
+					pWpn->m_iConsecutiveShots = 0;
+				}
+				if (tf_weaponspread_continuous_seed_multishot.GetInt() > -1)
+				{
+					iBaseSeed = tf_weaponspread_continuous_seed_multishot.GetInt();
+				}
+			}
+			else if (bSpreadNormal && nBulletsPerShot == 1)
+			{
+				if (flTimeSinceLastShot > 1.25f)
+				{
+					bFirePerfect = true;
+					pWpn->m_iConsecutiveShots = 0;
+				}
+				if (tf_weaponspread_continuous_seed.GetInt() > -1)
+				{
+					iBaseSeed = tf_weaponspread_continuous_seed.GetInt();
+				}
 			}
 		}
 
-		if (!bSpreadShotPattern && pWpn)
+		if (pWpn)
 		{
-			if (!bFirePerfect)
+			if (bFixedRecoilSpread)
 			{
-				pWpn->m_iBulletsFiredContinuously++;
-			}
-
-			if (bFixedSpreadEnabled)
-			{
-				iSeed = pWpn->m_iBulletsFiredContinuously;
+				iSeed = iBaseSeed + pWpn->m_iConsecutiveShots;
 			}
 		}
 
@@ -318,13 +376,27 @@ void FX_FireBullets( CTFWeaponBase *pWpn, int iPlayer, const Vector &vecOrigin, 
 		if ( bFixedSpread )
 		{
 			int iSpread = iBullet;
-			while ( iSpread >= ARRAYSIZE(g_vecFixedWpnSpreadPellets) )
+			int iArraySize;
+			if (bSpreadNormal)
 			{
-				iSpread -= ARRAYSIZE(g_vecFixedWpnSpreadPellets);
+				iArraySize = ARRAYSIZE(g_vecFixedWpnSpreadPellets);
 			}
+			else
+			{
+				iArraySize = ARRAYSIZE(g_vecFixedWpnSpreadPellets15);
+			}
+			while (iSpread >= iArraySize)
+			{
+				iSpread -= iArraySize;
+			}
+			Vector2D* vecFixedWpnSpreadPellets = bSpreadNormal ? g_vecFixedWpnSpreadPellets : g_vecFixedWpnSpreadPellets15;
 			float flScalar = 0.5f;
-			x = g_vecFixedWpnSpreadPellets[iSpread].x * flScalar;
-			y = g_vecFixedWpnSpreadPellets[iSpread].y * flScalar;
+			if (!bSpreadNormal && pWpn && pWpn->m_iConsecutiveShots > 0)
+			{
+				flScalar += MIN(pWpn->m_iConsecutiveShots, 6) * 0.33f;
+			}
+			x = vecFixedWpnSpreadPellets[iSpread].x * flScalar;
+			y = vecFixedWpnSpreadPellets[iSpread].y * flScalar;
 		}
 		else if ( bFirePerfect )
 		{

@@ -2700,7 +2700,7 @@ void CParticleSystemMgr::AttachKillList( CParticleCollection *pParticles )
 			}
 		}
 		Assert(0);											// why don't we have enough buffers?
-		ThreadSleep();
+		ThreadSleepEx(0);
 	}
 }
 #else
@@ -3132,6 +3132,11 @@ void CParticleOperatorInstance::operator delete( void* pData, int nBlockUse, con
 bool CParticleSystemMgr::ReadParticleDefinitions( CUtlBuffer &buf, const char *pFileName, bool bPrecache, bool bDecommitTempMemory )
 {
 	DECLARE_DMX_CONTEXT_DECOMMIT( bDecommitTempMemory );
+
+	if (!V_stricmp(pFileName, "particles/weapon_unusual_isotope.pcf"))
+	{
+		return false;
+	}
 
 	CDmxElement *pRoot;
 	if ( !UnserializeDMX( buf, &pRoot, pFileName ) || !pRoot )

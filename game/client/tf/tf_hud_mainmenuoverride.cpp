@@ -695,43 +695,6 @@ void CHudMainMenuOverride::OnTick()
 		}
 	}
 
-	// See if its time to nag about joining the war
-	float flTimeSinceWarNag = Plat_FloatTime() - m_flLastWarNagTime;
-	if ( !m_bPlayListExpanded && m_pHighlightAnims[ MMHA_WAR ] && ( flTimeSinceWarNag > 300.f || m_flLastWarNagTime == 0.f ) )
-	{
-		// Make sure our SOCache is ready
-		GCSDK::CGCClientSharedObjectCache *pSOCache = NULL;
-		if ( steamapicontext && steamapicontext->SteamUser() )
-		{
-			CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
-			pSOCache = GCClientSystem()->GetSOCache( steamID );
-		}
-
-		// Need to be initialized.  If we're not, we'll get false positives
-		// when we actually go to look for our war data
-		if ( pSOCache && pSOCache->BIsInitialized() )
-		{
-			m_flLastWarNagTime = Plat_FloatTime();
-
-			// Get war data
-			const CWarDefinition* pWarDef = GetItemSchema()->GetWarDefinitionByIndex( PYRO_VS_HEAVY_WAR_DEF_INDEX );
-			CWarData *pWarData = GetLocalPlayerWarData( pWarDef->GetDefIndex() );
-			war_side_t nAffiliation = INVALID_WAR_SIDE;
-			if ( pWarData )
-			{
-				// Get affiliation if they have one.
-				nAffiliation = pWarData->Obj().affiliation();
-			}
-
-			// They haven't joined the war!  Nag 'em
-			if ( nAffiliation == INVALID_WAR_SIDE && pWarDef->IsActive() )
-			{
-				StartHighlightAnimation( MMHA_WAR );
-			}
-		}
-	}
-
-
 #ifdef STAGING_ONLY
 	if ( m_bGeneratingIcons )
 	{
@@ -2421,7 +2384,7 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 
 		if ( steamapicontext && steamapicontext->SteamFriends() )
 		{
-			steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "http://forums.steampowered.com/forums/forumdisplay.php?f=906" );
+			steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://steamcommunity.com/app/440/discussions/" );
 		}
 		return;
 	}
@@ -2529,9 +2492,9 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 			CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
 			switch ( GetUniverse() )
 			{
-			case k_EUniversePublic: steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( CFmtStr1024( "http://steamcommunity.com/profiles/%llu/promocodes/tf2", steamID.ConvertToUint64() ) ); break;
-			case k_EUniverseBeta:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( CFmtStr1024( "http://beta.steamcommunity.com/profiles/%llu/promocodes/tf2", steamID.ConvertToUint64() ) ); break;
-			case k_EUniverseDev:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( CFmtStr1024( "http://localhost/community/profiles/%llu/promocodes/tf2", steamID.ConvertToUint64() ) ); break;
+			case k_EUniversePublic: steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( CFmtStr1024( "https://steamcommunity.com/profiles/%llu/promocodes/tf2", steamID.ConvertToUint64() ) ); break;
+			case k_EUniverseBeta:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( CFmtStr1024( "https://beta.steamcommunity.com/profiles/%llu/promocodes/tf2", steamID.ConvertToUint64() ) ); break;
+			case k_EUniverseDev:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( CFmtStr1024( "https://localhost/community/profiles/%llu/promocodes/tf2", steamID.ConvertToUint64() ) ); break;
 			}
 		}
 	}
@@ -2570,9 +2533,9 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 			CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
 			switch ( GetUniverse() )
 			{
-			case k_EUniversePublic: steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "http://www.teamfortress.com/meetyourmatch" ); break;
+			case k_EUniversePublic: steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://www.teamfortress.com/meetyourmatch" ); break;
 			case k_EUniverseBeta:	// Fall through
-			case k_EUniverseDev:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "http://csham.valvesoftware.com/tf.com/meetyourmatch" ); break;
+			case k_EUniverseDev:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://www.teamfortress.com/meetyourmatch" ); break;
 			}
 		}
 		else
@@ -2588,9 +2551,9 @@ void CHudMainMenuOverride::OnCommand( const char *command )
 			CSteamID steamID = steamapicontext->SteamUser()->GetSteamID();
 			switch ( GetUniverse() )
 			{
-			case k_EUniversePublic: steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "http://www.teamfortress.com/gargoyles_and_gravel" ); break;
+			case k_EUniversePublic: steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://www.teamfortress.com/gargoyles_and_gravel/" ); break;
 			case k_EUniverseBeta:	// Fall through
-			case k_EUniverseDev:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "http://www.teamfortress.com/gargoyles_and_gravel" ); break;
+			case k_EUniverseDev:	steamapicontext->SteamFriends()->ActivateGameOverlayToWebPage( "https://www.teamfortress.com/gargoyles_and_gravel/" ); break;
 			}
 		}
 		else
